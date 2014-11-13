@@ -3,15 +3,19 @@ import pandas as pd
 import pylab as p
 import matplotlib.pyplot as plt
 from sklearn import cross_validation
-
+from scipy import optimize as op
+import neuralNetwork as nn
 
 ### Random constants and stuff
 makePlots = 0
 epsilon = .001
 Ninputs = 11
+IL = 11
 Noutputs = 10
-Nhidden = 40
-Lambda = 1
+OL = 10
+Nhidden = 10
+HL = 10
+rLambda = 1
 
 ### This will hopefully be a method for predicting wine quality
 ### based on the results of some chemical tests...
@@ -77,7 +81,18 @@ for white_train_index, white_test_index in whiteSKF:
     Theta1 = 2*epsilon*np.random.random((Nhidden,Ninputs+1))-epsilon
     #Theta2 should be  10x41 and randomly initialized
     Theta2 = 2*epsilon*np.random.random((Noutputs,Nhidden+1))
-    
+    initial_nn_params = np.hstack((Theta1.ravel(),Theta2.ravel()))
+    nn_params, cost, _, _, _  = op.fmin_cg(lambda t: nn.costFunction(t, IL, HL, OL, whiteX_train, whiteY_train, rLambda), initial_nn_params, gtol = 0.001, maxiter = 40, full_output=1)
+	
+
+    print "I guess we made it here? but probably not"
+    #Reshape things to get Theta1,Theta2 back
+    firstI = HL*(IL+1)
+    nn1 = nn_params[0:firstI]
+    nn2 = nn_params[firstI::]
+    Theta1 = nn1.reshape((HL,IL+1))
+    Theta2 = nn2.reshape((OL,HL+1))
+
 
 
 
