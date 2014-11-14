@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 import pylab as p
 import matplotlib.pyplot as plt
-from sklearn import cross_validation
+from sklearn import cross_validation as cv
+from sklearn import metrics as m
 from scipy import optimize as op
 import neuralNetwork as nn
 
@@ -10,12 +11,15 @@ import neuralNetwork as nn
 makePlots = 0
 epsilon = .001
 Ninputs = 11
-IL = 11
+IL = Ninputs
 Noutputs = 10
-OL = 10
-Nhidden = 10
-HL = 10
+OL = Noutputs
+Nhidden = 40
+HL = Nhidden
 rLambda = 1
+nClasses = 10
+
+testing = 1
 
 ### This will hopefully be a method for predicting wine quality
 ### based on the results of some chemical tests...
@@ -62,8 +66,8 @@ if makePlots:
 
 ### Ok, so we probably want to split our data into training and testing sets. 
 ### Let's start by trying out a stratified k-fold CV
-whiteSKF = cross_validation.StratifiedKFold(whiteY, n_folds = 3)
-redSKF = cross_validation.StratifiedKFold(redY, n_folds = 3)
+whiteSKF = cv.StratifiedKFold(whiteY, k=3)
+redSKF = cv.StratifiedKFold(redY, k=3)
 
 for white_train_index, white_test_index in whiteSKF:
     whiteX_train, whiteX_test = whiteX[white_train_index], whiteX[white_test_index]
@@ -77,15 +81,22 @@ for white_train_index, white_test_index in whiteSKF:
     #---> 1 input layer, 1 hidden layer, 1 output layer
     #---> 11 inputs, 40 inputs, 10 outputs
 
+
+
+    if (testing):
+        whiteY_train = nn.dummyFunction(whiteX_train)
+        whiteY_test = nn.dummyFunction(whiteX_test)
+
+
     #Theta1 should be 40x12 and randomly initialized.
     Theta1 = 2*epsilon*np.random.random((Nhidden,Ninputs+1))-epsilon
     #Theta2 should be  10x41 and randomly initialized
     Theta2 = 2*epsilon*np.random.random((Noutputs,Nhidden+1))
     initial_nn_params = np.hstack((Theta1.ravel(),Theta2.ravel()))
-    nn_params, cost, _, _, _  = op.fmin_cg(lambda t: nn.costFunction(t, IL, HL, OL, whiteX_train, whiteY_train, rLambda), initial_nn_params, gtol = 0.001, maxiter = 40, full_output=1)
+    nn_params, cost, _, _, _  = op.fmin_cg(lambda t: nn.costFunction(t, IL, HL, OL, whiteX_train, whiteY_train, rLambda)[0], initial_nn_params, fprime = lambda t: nn.costFunction(t,IL,HL,OL,whiteX_train,whiteY_train,rLambda)[1],gtol = 0.001, maxiter = 80, full_output=1)
 	
+    print nn_params
 
-    print "I guess we made it here? but probably not"
     #Reshape things to get Theta1,Theta2 back
     firstI = HL*(IL+1)
     nn1 = nn_params[0:firstI]
@@ -93,7 +104,11 @@ for white_train_index, white_test_index in whiteSKF:
     Theta1 = nn1.reshape((HL,IL+1))
     Theta2 = nn2.reshape((OL,HL+1))
 
-
+    predict_params = np.hstack((Theta1.ravel(),Theta2.ravel()))
+    Ypredict = nn.predict(predict_params,IL,HL,OL,whiteX_test,nClasses)
+    success = m.precision_score(whiteY_test,Ypredict)
+    print success
+    
 
 
 bothWines = 0
