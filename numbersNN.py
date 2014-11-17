@@ -12,7 +12,7 @@ sys.path.append('/home/matt/Desktop/DataScience/pybrain')
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.datasets import SupervisedDataSet
 from pybrain.supervised.trainers import BackpropTrainer
-
+from pybrain.structure import SigmoidLayer
 
 
 def neuralNetwork():
@@ -29,7 +29,8 @@ def neuralNetwork():
 
     numbers_df = pd.read_csv('HandwrittenNumbers_XandY.txt')
     numbers = numbers_df.values
-    
+    #These come pre-sorted, which might fuck us up. Let's shuffle them
+    np.random.shuffle(numbers)
 
     #ok, great, we can get our feature matrices, X, and 
     #answer vectors, y
@@ -46,10 +47,10 @@ def neuralNetwork():
         numbersX_train, numbersX_test = numbersX[numbers_train_index], numbersX[numbers_test_index]
         numbersY_train, numbersY_test = numbersY[numbers_train_index], numbersY[numbers_test_index]
         
-        abridge = 1
+        abridge = 0
         if abridge:
-            numbersX_train = numbersX_train[0:100,:]
-            numbersY_train = numbersY_train[0:100]
+            numbersX_train = numbersX_train[0:1000,:]
+            numbersY_train = numbersY_train[0:1000]
             
         print "Sizes of training and cv data:"
         print np.shape(numbersX_train)
@@ -59,14 +60,16 @@ def neuralNetwork():
         m = np.shape(numbersX_train)[0]
         mval = np.shape(numbersX_test)[0]
             
-
+        # this builds a mxn matrix indicating if the mth example belongs 
+        # to the nth class
         yy = np.zeros((m,nClasses))
         yyVal = np.zeros((mval,nClasses))
         for i in range(0,m):
             for j in range(0,nClasses):
                 if (numbersY_train[i] == j+1):
                     yy[i,j] = 1
-           
+        
+        # and then we do the same for the cross validation set
         for i in range(0,mval):
             for j in range(0,nClasses):
                 if (numbersY_test[i] == j+1):
@@ -75,38 +78,53 @@ def neuralNetwork():
         X = numbersX_train
         Xval = numbersX_test
 
-        net = buildNetwork(IL,HL,OL)
-
+        # set up NN architecture
+        net = buildNetwork(IL,HL,OL, outclass=SigmoidLayer)
         ds = SupervisedDataSet(nFeatures,nClasses)
+        # add numbers data to dataset
         for i in range(0,m):
             ds.addSample(X[i,:],yy[i,:])
         
         print "successfully loaded %d training examples..."%(m)
-    
+        
+        # add in cross validation data
         dsval = SupervisedDataSet(nFeatures,nClasses)
         for i in range(0,mval):
             dsval.addSample(Xval[i,:],yyVal[i,:])
         print "successfully created cv dataset..."
+        
+        # run backprop neural network trainer
+        trainer = BackpropTrainer(net, ds, learningrate = 0.5)
+        trainer.trainUntilConvergence(verbose = False, continueEpochs = 2, validationProportion=0.1)
 
-
-        trainer = BackpropTrainer(net, ds)
-        trainer.trainUntilConvergence(verbose = False, continueEpochs = 2)
-
-    
+        # run trained neural network on cross validation set
         fullpredict = net.activateOnDataset(dsval)
         print fullpredict 
         
+        # creat mval x n matrix for predictions
         fullpredictT = np.zeros(np.shape(fullpredict))
         for i in range(0,mval):
             for j in range(0,nClasses):
                 if (fullpredict[i,j] == max(fullpredict[i,:])):
                     fullpredictT[i,j] = 1
                 
-            
-
+        # print success as calculated by metric module
         success = metric.precision_score(yyVal,fullpredictT)
         print success
 
+        
+        # build confusion matrix 
+        cvvec = np.zeros((mval,1))
+        predvec = np.zeros((mval,1))
+        for i in range(0,mval):
+            for j in range(0,nClasses):
+                if (yyVal[i,j] == 1):
+                    cvvec[i] = j + 1
+                if (fullpredictT[i,j] == 1):
+                    predvec[i] = j + 1
+        
+        confuseMat = metric.confusion_matrix(cvvec,predvec)
+        print confuseMat
     return yyVal,fullpredictT
 
 
