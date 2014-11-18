@@ -79,7 +79,7 @@ def neuralNetwork():
         Xval = numbersX_test
 
         # set up NN architecture
-        net = buildNetwork(IL,HL,OL, outclass=SigmoidLayer)
+        net = buildNetwork(IL,HL,HL,HL,HL,HL,HL,OL, outclass=SigmoidLayer)
         ds = SupervisedDataSet(nFeatures,nClasses)
         # add numbers data to dataset
         for i in range(0,m):
