@@ -14,6 +14,8 @@ from pybrain.datasets import SupervisedDataSet
 from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.structure import SigmoidLayer
 from REC_curve import *
+import pickle
+
 
 def neuralNetwork():
     
@@ -147,6 +149,10 @@ def neuralNetwork_NoCV():
 
     wines_df = pd.read_csv('train-winequality-white.csv',sep=';',header=0)
     wines = wines_df.values
+    
+    wines_test_df = pd.read_csv('train-winequality-white.csv',sep=';',header=0)
+    wines_test = wines_test_df.values
+
     #These come pre-sorted, which might fuck us up. Let's shuffle them
     np.random.shuffle(wines)
 
@@ -155,44 +161,58 @@ def neuralNetwork_NoCV():
     nFeatures = np.shape(wines)[1]-1
     winesX = wines[:,0:nFeatures]
     winesY = wines[:,nFeatures]
+
+    winesX_test = wines_test[:,0:nFeatures]
+    winesY_test = wines_test[:,nFeatures]
     
     print "performing feature normalization..."
     for i in range(0,nFeatures):
         mu = np.mean(winesX[:,i])
         sigma = np.sqrt(np.var(winesX[:,i]))
         winesX[:,i] = (winesX[:,i]-mu)/sigma
+        winesX_test[:,i] = (winesX_test[:,i]-mu)/sigma
 
     winesX_train = winesX
     winesY_train = winesY
 
     print "Sizes of training and cv data:"
     print np.shape(winesX_train)
-    
+    print np.shape(winesX_test)
     #let's actually build a yy matrix
     m = np.shape(winesX_train)[0]
-    
+    mtest = np.shape(winesX_test)[0]
             
     # this builds a mxn matrix indicating if the mth example belongs 
     # to the nth class
     yy = np.zeros((m,nClasses))
-    
+    yytest = np.zeros((mtest,nClasses))
     for i in range(0,m):
         for j in range(0,nClasses):
             if (winesY_train[i] == j+1):
                 yy[i,j] = 1
                 
                 
+    for i in range(0,mtest):
+        for j in range(0,nClasses):
+            if (winesY_test[i] == j+1):
+                yytest[i,j] = 1
+    
+    
                     
     X = winesX_train
     
 
     # set up NN architecture
-    net = buildNetwork(IL,HL,HL,HL,HL,HL,HL,HL,HL,HL,OL, outclass=SigmoidLayer)
+    net = buildNetwork(IL,HL,HL,HL,HL,OL, outclass=SigmoidLayer)
     ds = SupervisedDataSet(nFeatures,nClasses)
+    dstest = SupervisedDataSet(nFeatures,nClasses)
     # add wines data to dataset
     for i in range(0,m):
         ds.addSample(X[i,:],yy[i,:])
         
+    for i in range(0,mtest):
+        dstest.addSample(winesX_test[i,:],yytest[i,:])
+
     print "successfully loaded %d training examples..."%(m)
         
     # run backprop neural network trainer
@@ -201,23 +221,33 @@ def neuralNetwork_NoCV():
 
     # run trained neural network on cross validation set
     fullpredict = net.activateOnDataset(ds)
-    print fullpredict 
-        
+    fullPredictTest = net.activateOnDataset(dstest)
+
     # creat mval x n matrix for predictions
     fullpredictT = np.zeros(np.shape(fullpredict))
+    fullPredictTtest = np.zeros(np.shape(fullPredictTest))
     for i in range(0,m):
         for j in range(0,nClasses):
             if (fullpredict[i,j] == max(fullpredict[i,:])):
                 fullpredictT[i,j] = 1
                 
+    for i in range(0,mtest):
+        for j in range(0,nClasses):
+            if (fullPredictTest[i,j] == max(fullPredictTest[i,:])):
+                fullPredictTtest[i,j] = 1
+
     # print success as calculated by metric module
     success = metric.precision_score(yy,fullpredictT)
-    print success
+    successTest = metric.precision_score(yytest,fullPredictTtest)
 
+    print success
+    print successTest
         
     # build confusion matrix 
     cvvec = np.zeros((m,1))
     predvec = np.zeros((m,1))
+    cvvecTest = np.zeros((mtest,1))
+    predvecTest = np.zeros((mtest,1))
     for i in range(0,m):
         for j in range(0,nClasses):
             if (yy[i,j] == 1):
@@ -226,11 +256,180 @@ def neuralNetwork_NoCV():
                 predvec[i] = j + 1
         
     confuseMat = metric.confusion_matrix(cvvec,predvec)
+
     print confuseMat
+
+    for i in range(0,mtest):
+        incNorm = 0
+        for j in range(0,nClasses):
+            
+            if (yytest[i,j] == 1):
+                cvvecTest[i] = j + 1
+
+            if (fullPredictTtest[i,j] == 1):
+                predvecTest[i] = j + 1
+
+            
+
+    confuseMat = metric.confusion_matrix(cvvecTest,np.round(predvecTest))
+    print confuseMat 
 
     a = rec_curve(cvvec,predvec)
     a.calc_rec(0.0, 10.0)
-
     a.display(None)
 
+    a = rec_curve(cvvecTest,predvecTest)
+    a.calc_rec(0.0, 10.0)
+    a.display(None)
+
+    updateBool = input('Would you like to update your network?')
+    if updateBool:
+        fileObject = open('winesNNnetwork.pickle','w')
+        pickle.dump(net, fileObject)
+        fileObject.close()
+
     return yy,fullpredictT
+
+
+def winePrediction():
+    nClasses = 10
+
+    fileObject = open('winesNNnetwork.pickle','r')
+    net = pickle.load(fileObject)
+
+    wines_df = pd.read_csv('train-winequality-white.csv',sep=';',header=0)
+    wines = wines_df.values
+
+    wines_test_df = pd.read_csv('test-winequality-white.csv',sep=';',header=0)
+    wines_test = wines_test_df.values
+
+    nFeatures = np.shape(wines)[1]-1
+    winesX = wines[:,0:nFeatures]
+    winesY = wines[:,nFeatures]
+    winesX_test = wines_test[:,0:nFeatures]
+    winesY_test = wines_test[:,nFeatures]
+
+    print "performing feature normalization..."
+    for i in range(0,nFeatures):
+        mu = np.mean(winesX[:,i])
+        sigma = np.sqrt(np.var(winesX[:,i]))
+        winesX[:,i] = (winesX[:,i]-mu)/sigma
+        winesX_test[:,i] = (winesX_test[:,i]-mu)/sigma
+
+    winesX_train = winesX
+    winesY_train = winesY
+
+    print "Sizes of training and test data:"
+    print np.shape(winesX_train)
+    print np.shape(winesX_test)
+    #let's actually build a yy matrix
+    m = np.shape(winesX_train)[0]
+    mtest = np.shape(winesX_test)[0]
+            
+    # this builds a mxn matrix indicating if the mth example belongs 
+    # to the nth class
+    yy = np.zeros((m,nClasses))
+    yytest = np.zeros((mtest,nClasses))
+    for i in range(0,m):
+        for j in range(0,nClasses):
+            if (winesY_train[i] == j+1):
+                yy[i,j] = 1
+                
+                
+    for i in range(0,mtest):
+        for j in range(0,nClasses):
+            if (winesY_test[i] == j+1):
+                yytest[i,j] = 1
+    
+    
+                    
+    X = winesX_train
+    
+    ds = SupervisedDataSet(nFeatures,nClasses)
+    dstest = SupervisedDataSet(nFeatures,nClasses)
+    # add wines data to dataset
+    for i in range(0,m):
+        ds.addSample(X[i,:],yy[i,:])
+        
+    for i in range(0,mtest):
+        dstest.addSample(winesX_test[i,:],yytest[i,:])
+
+    print "successfully loaded %d training examples..."%(m)
+        
+    # run trained neural network on cross validation set
+    fullpredict = net.activateOnDataset(ds)
+    fullPredictTest = net.activateOnDataset(dstest)
+
+    # creat mval x n matrix for predictions
+    fullpredictT = np.zeros(np.shape(fullpredict))
+    fullPredictTtest = np.zeros(np.shape(fullPredictTest))
+    for i in range(0,m):
+        for j in range(0,nClasses):
+            if (fullpredict[i,j] == max(fullpredict[i,:])):
+                fullpredictT[i,j] = 1
+                
+    for i in range(0,mtest):
+        for j in range(0,nClasses):
+            if (fullPredictTest[i,j] == max(fullPredictTest[i,:])):
+                fullPredictTtest[i,j] = 1
+
+    # print success as calculated by metric module
+    success = metric.precision_score(yy,fullpredictT)
+    successTest = metric.precision_score(yytest,fullPredictTtest)
+
+    print success
+    print successTest
+        
+    # build confusion matrix 
+    cvvec = np.zeros((m,1))
+    predvec = np.zeros((m,1))
+    cvvecTest = np.zeros((mtest,1))
+    predvecTest = np.zeros((mtest,1))
+    for i in range(0,m):
+        for j in range(0,nClasses):
+            if (yy[i,j] == 1):
+                cvvec[i] = j + 1
+            if (fullpredictT[i,j] == 1):
+                predvec[i] = j + 1
+        
+                
+
+
+
+    for i in range(0,mtest):
+        incNorm = 0
+        for j in range(0,nClasses):
+            
+            if (yytest[i,j] == 1):
+                cvvecTest[i] = j + 1
+
+            if (fullPredictTtest[i,j] == 1):
+                predvecTest[i] = j + 1
+
+            
+
+    confuseMat = metric.confusion_matrix(cvvecTest,np.round(predvecTest))
+    print confuseMat 
+
+    print np.shape(cvvecTest)
+    print np.shape(predvecTest)
+
+    confusion = np.histogram2d(cvvecTest,predvecTest, bins=11,
+                               range=[[-0.5,10.5], [-0.5,10.5]])#, weights=None)
+
+
+    plt.imshow(np.log10(confusion[0]), origin='lower', interpolation='none', vmin=0)
+    plt.colorbar()
+    plt.title('Confusion Matrix')
+    plt.xlabel('true label')
+    plt.ylabel('fitted label')
+    
+
+
+    a = rec_curve(cvvecTest,predvecTest)
+    a.calc_rec(0.0, 10.0)
+    a.display(None)
+
+    
+
+    
