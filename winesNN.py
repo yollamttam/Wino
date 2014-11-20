@@ -411,19 +411,6 @@ def winePrediction():
     confuseMat = metric.confusion_matrix(cvvecTest,np.round(predvecTest))
     print confuseMat 
 
-    print np.shape(cvvecTest)
-    print np.shape(predvecTest)
-
-    confusion = np.histogram2d(cvvecTest,predvecTest, bins=11,
-                               range=[[-0.5,10.5], [-0.5,10.5]])#, weights=None)
-
-
-    plt.imshow(np.log10(confusion[0]), origin='lower', interpolation='none', vmin=0)
-    plt.colorbar()
-    plt.title('Confusion Matrix')
-    plt.xlabel('true label')
-    plt.ylabel('fitted label')
-    
 
 
     a = rec_curve(cvvecTest,predvecTest)
